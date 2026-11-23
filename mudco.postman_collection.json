@@ -1,0 +1,842 @@
+{
+  "info": {
+    "name": "MUD.CO API (mock)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login salah (ERR-AUTH-02)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code ERR-AUTH-02', () => pm.expect(pm.response.json().code).to.eql('ERR-AUTH-02'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"pemilik\",\n  \"password\": \"salahsalah\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Password pendek (ERR-VAL-07)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-07', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-07'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"kasir\",\n  \"password\": \"abc\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login kasir",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('kasirToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"kasir\",\n  \"password\": \"kasir1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login barista",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('baristaToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"barista\",\n  \"password\": \"barista1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login pemilik",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('pemilikToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"pemilik\",\n  \"password\": \"pemilik1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Tanpa token (ERR-AUTH-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code ERR-AUTH-01', () => pm.expect(pm.response.json().code).to.eql('ERR-AUTH-01'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/orders"
+          }
+        },
+        {
+          "name": "Barista akses kasir (ERR-AUTH-04)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('code ERR-AUTH-04', () => pm.expect(pm.response.json().code).to.eql('ERR-AUTH-04'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{baristaToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/stock"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Menu",
+      "item": [
+        {
+          "name": "Get menus",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json();",
+                  "pm.test('ada menu', () => pm.expect(m.length).to.be.above(0));",
+                  "pm.collectionVariables.set('menuId', m.find(x => x.name === 'Americano').id);",
+                  "pm.collectionVariables.set('soldOutMenuId', m.find(x => x.name === 'Cheesecake').id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/menus"
+          }
+        },
+        {
+          "name": "Simpan menu tidak valid (ERR-VAL-08)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-08', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-08'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/menus",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ab\",\n  \"category\": \"x\",\n  \"price\": 1,\n  \"costPrice\": 0\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Order flow",
+      "item": [
+        {
+          "name": "Buat order (keranjang kosong, ERR-VAL-03)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-03', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-03'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": 3,\n  \"paymentMethod\": \"TUNAI\",\n  \"items\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Meja 11 (ERR-VAL-05)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-05', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-05'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": 11,\n  \"paymentMethod\": \"TUNAI\",\n  \"items\": [\n    {\n      \"menuId\": \"{{menuId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Qty 21 (ERR-VAL-02)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-02', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-02'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": 3,\n  \"paymentMethod\": \"TUNAI\",\n  \"items\": [\n    {\n      \"menuId\": \"{{menuId}}\",\n      \"quantity\": 21\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Menu habis (ERR-VAL-04)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-04', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-04'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": 3,\n  \"paymentMethod\": \"TUNAI\",\n  \"items\": [\n    {\n      \"menuId\": \"{{soldOutMenuId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Buat order OK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const o = pm.response.json();",
+                  "pm.test('MENUNGGU, total 30000', () => { pm.expect(o.status).to.eql('MENUNGGU'); pm.expect(o.total).to.eql(30000); });",
+                  "pm.collectionVariables.set('orderId', o.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": 3,\n  \"paymentMethod\": \"TUNAI\",\n  \"items\": [\n    {\n      \"menuId\": \"{{menuId}}\",\n      \"quantity\": 2\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Barista konfirmasi bayar (ERR-AUTH-04)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('code ERR-AUTH-04', () => pm.expect(pm.response.json().code).to.eql('ERR-AUTH-04'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{baristaToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/confirm-payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Kasir konfirmasi bayar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('nota ada', () => pm.expect(pm.response.json().nota).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{kasirToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/confirm-payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uangDiterima\": 50000\n}"
+            }
+          }
+        },
+        {
+          "name": "Konfirmasi ulang (ERR-BIZ-02)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('code ERR-BIZ-02', () => pm.expect(pm.response.json().code).to.eql('ERR-BIZ-02'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{kasirToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/confirm-payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uangDiterima\": 50000\n}"
+            }
+          }
+        },
+        {
+          "name": "Barista loncat ke SELESAI (ERR-BIZ-03)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('code ERR-BIZ-03', () => pm.expect(pm.response.json().code).to.eql('ERR-BIZ-03'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{baristaToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"SELESAI\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Barista -> DIPROSES",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{baristaToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"DIPROSES\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Barista -> SELESAI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{baristaToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"SELESAI\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cek order SELESAI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('SELESAI', () => pm.expect(pm.response.json().status).to.eql('SELESAI'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "Order tidak ada (ERR-BIZ-01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('code ERR-BIZ-01', () => pm.expect(pm.response.json().code).to.eql('ERR-BIZ-01'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/orders/tidak-ada"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Pemilik: laporan & stok",
+      "item": [
+        {
+          "name": "Laporan hari ini",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('today', new Date().toLocaleDateString('sv-SE'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('laba = omzet - HPP', () => pm.expect(r.estimatedProfit).to.eql(r.totalRevenue - r.totalCost));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/report?from={{today}}&to={{today}}"
+          }
+        },
+        {
+          "name": "Rentang tanggal salah (ERR-VAL-12)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-12', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-12'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/report?from=2026-01-10&to=2026-01-01"
+          }
+        },
+        {
+          "name": "Hapus menu berriwayat (ERR-VAL-09)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-09', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-09'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/menus/{{menuId}}"
+          }
+        },
+        {
+          "name": "Get stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "const susu = s.ingredients.find(i => i.name === 'Susu');",
+                  "pm.test('Susu stok menipis', () => pm.expect(susu.lowStock).to.be.true);",
+                  "pm.collectionVariables.set('ingredientId', susu.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/stock"
+          }
+        },
+        {
+          "name": "Stok masuk qty 0 (ERR-VAL-11)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code ERR-VAL-11', () => pm.expect(pm.response.json().code).to.eql('ERR-VAL-11'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/stock/add",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingredientId\": \"{{ingredientId}}\",\n  \"changeType\": \"STOK_MASUK\",\n  \"quantity\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "Penyesuaian stok 4000",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('tidak menipis lagi', () => pm.expect(pm.response.json().lowStock).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pemilikToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/stock/add",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingredientId\": \"{{ingredientId}}\",\n  \"changeType\": \"PENYESUAIAN\",\n  \"quantity\": 4000\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
