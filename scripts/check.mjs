@@ -75,5 +75,25 @@ assert.equal(r.stockQty, 4000);
 assert.equal(r.lowStock, false);
 assert.equal((await api.getStock()).history[0].quantity, 1500); // difference is logged
 
+// ---- OOP concepts (src/domain.js) ----
+const d = await import('../src/domain.js');
+const mi = new d.MenuItem({ id: 'x', nama: 'Tes Menu', kategori: 'K', harga: 1000, hargaPokok: 0 });
+assert.throws(() => { mi.harga = -1; }, e => e.code === 'ERR-VAL-08'); // encapsulation: validating setter
+const ps = new d.Pesanan({ id: 'p', number: 'OR9', tableNumber: 1, paymentMethod: 'QRIS' }, new d.DaftarMenu().tambah(mi));
+ps.tambahItem(mi, 1); ps.tambahItem('Tes Menu', 2); // overloading: MenuItem object / menu name
+assert.equal(ps.total(), 3000);
+ps.items.push(1);
+assert.equal(ps.items.length, 2); // composition: items are a protected copy
+assert.equal('ItemPesanan' in d, false); // composition: the part class is not exported
+assert.throws(() => { ps.status = 'SELESAI'; }, TypeError); // encapsulation: status has no setter
+assert.throws(() => new d.Pembayaran(1), TypeError); // abstract base class
+assert.match(d.Pembayaran.untuk('QRIS', 3000).proses(), /QRIS/); // polymorphism + overriding
+assert.match(d.Pembayaran.untuk('TUNAI', 3000, 5000).proses(), /kembalian Rp2000/);
+assert.ok(new d.Nota().cetak(5000).includes('Rp5000') && new d.Nota().cetak(ps).includes('OR9')); // overloading by type
+assert.equal(new d.Pemilik({ id: 1, username: 'a' }).bisa('confirmPayment'), false); // overriding hakAkses()
+const t0 = Date.now();
+await Promise.all([new d.PrinterService({ delay: 200 }).cetak(ps, new d.Nota()), new d.NotifikasiService({ delay: 200 }).kirimKeBarista(ps)]);
+assert.ok(Date.now() - t0 < 350, 'async tasks must run in parallel');
+
 console.log('all checks passed');
 process.exit(0);

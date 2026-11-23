@@ -1,6 +1,12 @@
 // Mock backend: localStorage + BroadcastChannel (real-time across tabs of one browser).
-// Every function is async and enforces the FSD rules (RBAC, validation, status order),
-// so replacing this file with fetch()/Supabase calls keeps the UI untouched.
+// Every function is async and delegates the rules to the OOP domain layer (src/domain.js), so replacing
+// this file with fetch()/Supabase calls keeps the UI untouched.
+import { ApiError, MSG, soldOutMsg } from './errors.js';
+import {
+  BahanBaku, DaftarMenu, Inventori, MenuItem, Nota, NotifikasiService, Pembayaran, Pengguna, Pesanan, PrinterService,
+} from './domain.js';
+
+export { ApiError, MSG, soldOutMsg };
 export const MOCK = true;
 const KEY = 'mudco-db';
 const SES = 'mudco-session';
@@ -9,45 +15,9 @@ const subs = new Set();
 const emit = () => subs.forEach(f => f());
 bc.onmessage = emit;
 export const subscribe = f => (subs.add(f), () => subs.delete(f));
-
-// Error catalog (FSD Bagian 6)
-export const MSG = {
-  'ERR-VAL-01': 'QR Code tidak valid, silakan hubungi staf',
-  'ERR-VAL-02': 'Jumlah item minimal 1 dan maksimal 20',
-  'ERR-VAL-03': 'Pilih minimal 1 menu sebelum checkout',
-  'ERR-VAL-04': 'Menu [nama] sedang habis, silakan hapus dari keranjang',
-  'ERR-VAL-05': 'Nomor meja tidak valid (1–10)',
-  'ERR-VAL-06': 'Pilih metode pembayaran',
-  'ERR-VAL-07': 'Masukkan username / Password minimal 8 karakter',
-  'ERR-VAL-08': 'Periksa kembali data menu (nama, harga, HPP)',
-  'ERR-VAL-09': 'Menu memiliki riwayat transaksi, nonaktifkan sebagai gantinya',
-  'ERR-VAL-10': 'Periksa kembali data bahan baku',
-  'ERR-VAL-11': 'Jumlah stok tidak valid',
-  'ERR-VAL-12': 'Rentang tanggal tidak valid',
-  'ERR-BIZ-01': 'Pesanan tidak tersedia',
-  'ERR-BIZ-02': 'Pesanan ini sudah dikonfirmasi sebelumnya',
-  'ERR-BIZ-03': 'Mulai proses pesanan terlebih dahulu',
-  'ERR-AUTH-01': 'Anda harus login untuk mengakses halaman ini',
-  'ERR-AUTH-02': 'Username atau password salah',
-  'ERR-AUTH-03': 'Akun dikunci. Coba lagi dalam 15 menit',
-  'ERR-AUTH-04': 'Anda tidak memiliki izin untuk mengakses halaman ini',
-  'ERR-SYS-01': 'Layanan tidak tersedia. Silakan coba lagi',
-  'ERR-SYS-02': 'Gagal memuat menu, periksa koneksi internet Anda',
-  'ERR-SYS-04': 'Nota gagal dicetak, silakan cetak ulang manual',
-  'ERR-SYS-05': '', // race condition: handled silently
-};
-export const soldOutMsg = nama => MSG['ERR-VAL-04'].replace('[nama]', nama);
-export class ApiError extends Error {
-  constructor(code, text, fields) {
-    super(text ?? MSG[code]);
-    this.code = code;
-    this.fields = fields || [];
-  }
-}
 const err = (...a) => new ApiError(...a);
 
 const day = t => new Date(t).toLocaleDateString('sv-SE'); // YYYY-MM-DD, local time
-const r2 = n => Math.round(n * 100) / 100;
 export const isValidTable = t => /^\d+$/.test(t) && +t >= 1 && +t <= 10;
 
 // ---------- seed ----------
@@ -82,12 +52,12 @@ function seed() {
     };
   }
   const user = (username, role) => ({ id: id(), username, password: username + '1234', role, failedAttempts: 0, lockedUntil: null });
-  const ing = (name, unit, stockQty, minStock) => ({ id: id(), name, unit, stockQty, minStock, isActive: true, updatedAt: Date.now() });
+  const ing = (name, unit, stockQty, minStock) => ({ id: id(), name, unit, stockQty, minStock, isActive: true, updatedAt: Date.now(), riwayat: [] });
   return {
     seq: 0,
     // ponytail: plaintext passwords in the mock; the real backend must store bcrypt hashes (BR-17)
     users: [user('kasir', 'KASIR'), user('barista', 'BARISTA'), user('pemilik', 'PEMILIK')],
-    menus, orders: [], transactions: [], stockHistories: [], summaries,
+    menus, orders: [], transactions: [], summaries,
     ingredients: [ing('Biji Kopi', 'gram', 2000, 1000), ing('Susu', 'ml', 2500, 3000), ing('Gula Aren', 'ml', 1200, 500), ing('Sirup Vanila', 'ml', 800, 300), ing('Cup 16oz', 'pcs', 40, 50)],
   };
 }
@@ -103,11 +73,13 @@ const save = d => { localStorage.setItem(KEY, JSON.stringify(d)); bc.postMessage
 // ---------- auth ----------
 export const getSession = () => { try { return JSON.parse(sessionStorage.getItem(SES)); } catch { return null; } };
 export const logout = () => sessionStorage.removeItem(SES);
-const need = role => {
+// RBAC: the session becomes a Pengguna subclass (Kasir / Barista / Pemilik) that answers bisa(action).
+const need = action => {
   const s = getSession();
   if (!s) throw err('ERR-AUTH-01');
-  if (role && ![].concat(role).includes(s.role)) throw err('ERR-AUTH-04');
-  return s;
+  const user = Pengguna.dari(s);
+  if (!user.bisa(action)) throw err('ERR-AUTH-04');
+  return user;
 };
 export async function login(username, password) {
   if (!username?.trim()) throw err('ERR-VAL-07', 'Masukkan username');
@@ -129,36 +101,41 @@ export async function login(username, password) {
   return s;
 }
 
-// ---------- printer (device setting: sim | browser | offline) ----------
-export const getPrinter = () => localStorage.getItem('mudco-printer') || 'sim';
+// ---------- printer + notification services (async, simulated latency) ----------
+export const getPrinter = () => localStorage.getItem('mudco-printer') || 'sim'; // sim | browser | offline
 export const setPrinter = v => localStorage.setItem('mudco-printer', v);
 // ponytail: real ESC/POS needs a print agent or WebUSB/Bluetooth; here it is simulated or uses window.print()
-const printResult = () => (getPrinter() === 'offline' ? 'GAGAL' : 'BERHASIL');
+const printer = () => new PrinterService({ mode: getPrinter() });
+const notif = () => new NotifikasiService({ kirim: () => bc.postMessage(1) }); // later: Supabase Realtime
 
 // ---------- menus ----------
 export const getMenus = async ({ all } = {}) => load().menus.filter(m => all || m.isActive);
-const menuBad = m => [
-  !(m.name?.trim().length >= 3 && m.name.trim().length <= 100) && 'name',
-  !(+m.price > 0) && 'price',
-  !(m.costPrice !== '' && m.costPrice != null && +m.costPrice >= 0) && 'costPrice',
-  !(m.category?.trim() && m.category.trim().length <= 50) && 'category',
-].filter(Boolean);
 export async function saveMenu(m) {
-  need('PEMILIK');
-  const bad = menuBad(m);
+  need('manageMenu');
+  const bad = MenuItem.fieldsBermasalah(m);
   if (bad.length) throw err('ERR-VAL-08', undefined, bad);
   const db = load();
-  const rec = { name: m.name.trim(), category: m.category.trim(), price: +m.price, costPrice: +m.costPrice, imageUrl: m.imageUrl?.trim() || '' };
-  const cur = m.id && db.menus.find(x => x.id === m.id);
-  if (cur) Object.assign(cur, rec);
-  else db.menus.push({ id: crypto.randomUUID(), isAvailable: true, isActive: true, ...rec });
+  const i = db.menus.findIndex(x => x.id === m.id);
+  const item = (i >= 0
+    ? MenuItem.from(db.menus[i])
+    : new MenuItem({ id: crypto.randomUUID(), nama: m.name, kategori: m.category, harga: m.price, hargaPokok: m.costPrice })
+  ).perbarui(m);
+  if (i >= 0) db.menus[i] = item.toJSON(); else db.menus.push(item.toJSON());
   save(db);
 }
-const patchMenu = async (id, p) => { need('PEMILIK'); const db = load(); Object.assign(db.menus.find(x => x.id === id), p); save(db); };
-export const setAvailable = (id, isAvailable) => patchMenu(id, { isAvailable });
-export const setActive = (id, isActive) => patchMenu(id, { isActive });
+const patchMenu = async (id, fn) => {
+  need('manageMenu');
+  const db = load();
+  const i = db.menus.findIndex(x => x.id === id);
+  const item = MenuItem.from(db.menus[i]);
+  fn(item);
+  db.menus[i] = item.toJSON();
+  save(db);
+};
+export const setAvailable = (id, v) => patchMenu(id, m => m.tandaiTersedia(v));
+export const setActive = (id, v) => patchMenu(id, m => m.setAktif(v));
 export async function deleteMenu(id) {
-  need('PEMILIK');
+  need('manageMenu');
   const db = load();
   const used = db.orders.some(o => o.items.some(i => i.menuId === id)) || Object.values(db.summaries).some(s => s.menus.some(x => x.menuId === id));
   if (used) throw err('ERR-VAL-09'); // BR-35: soft delete only
@@ -169,23 +146,22 @@ export async function deleteMenu(id) {
 // ---------- orders ----------
 export async function createOrder({ tableNumber, paymentMethod, items }) {
   if (!items?.length) throw err('ERR-VAL-03');
-  if (!(Number.isInteger(tableNumber) && tableNumber >= 1 && tableNumber <= 10)) throw err('ERR-VAL-05');
-  if (!['QRIS', 'TUNAI'].includes(paymentMethod)) throw err('ERR-VAL-06');
   const db = load();
-  const lines = items.map(({ menuId, quantity }) => {
-    if (!(Number.isInteger(quantity) && quantity >= 1 && quantity <= 20)) throw err('ERR-VAL-02');
-    const m = db.menus.find(x => x.id === menuId);
-    if (!m || !m.isActive || !m.isAvailable) throw err('ERR-VAL-04', soldOutMsg(m?.name ?? 'ini')); // BR-06: re-validated server-side
-    return { menuId, name: m.name, price: m.price, quantity, subtotal: m.price * quantity };
-  });
-  const o = {
-    id: crypto.randomUUID(), number: 'OR' + String(++db.seq).padStart(4, '0'), tableNumber, paymentMethod,
-    status: 'MENUNGGU', items: lines, total: lines.reduce((a, l) => a + l.subtotal, 0),
-    notificationSent: true, createdAt: Date.now(), updatedAt: Date.now(), paidAt: null,
-  };
-  db.orders.push(o);
+  // AGGREGATION: DaftarMenu groups MenuItems. COMPOSITION: Pesanan creates its own ItemPesanan.
+  const pesanan = new Pesanan(
+    { id: crypto.randomUUID(), number: 'OR' + String(++db.seq).padStart(4, '0'), tableNumber, paymentMethod },
+    DaftarMenu.dari(db.menus),
+  );
+  items.forEach(({ menuId, quantity }) => pesanan.tambahItem(menuId, quantity)); // OVERLOADING: string version, re-validated server-side (BR-06)
+  db.orders.push(pesanan.toJSON());
   save(db);
-  return o;
+  // ASYNCHRONOUS: notify the cashier without making the buyer wait, then record that it was delivered (D2.notification_sent)
+  notif().kirimKeKasir(pesanan).then(() => {
+    const fresh = load();
+    const row = fresh.orders.find(o => o.id === pesanan.id);
+    if (row) { row.notificationSent = true; save(fresh); }
+  });
+  return pesanan.toJSON();
 }
 export async function getOrder(id) {
   const o = load().orders.find(x => x.id === id);
@@ -193,91 +169,92 @@ export async function getOrder(id) {
   return o;
 }
 export async function listOrders() {
-  need(['KASIR', 'BARISTA']);
+  need('listOrders');
   const db = load();
   return db.orders.map(o => ({ ...o, tx: db.transactions.find(t => t.orderId === o.id) || null }));
 }
-export async function confirmPayment(orderId) {
-  const s = need('KASIR');
+export async function confirmPayment(orderId, uangDiterima) {
+  const kasir = need('confirmPayment');
+  const row = load().orders.find(x => x.id === orderId);
+  if (!row) throw err('ERR-BIZ-01');
+  const pesanan = Pesanan.from(row);
+  const pembayaran = Pembayaran.untuk(pesanan.metode, pesanan.total(), uangDiterima); // POLYMORPHISM: Tunai or QRIS
+  const pesan = kasir.konfirmasi(pesanan, pembayaran); // ASSOCIATION: Kasir works on the Pesanan it is handed (checks + status change in memory)
+  // ASYNCHRONOUS: print the receipt and tell the barista at the same time (total time = the slower one, not the sum)
+  const [cetak] = await Promise.all([printer().cetak(pesanan, new Nota()), notif().kirimKeBarista(pesanan)]);
+  // Critical section (no await): re-check against fresh data, someone else may have confirmed meanwhile
   const db = load();
-  const o = db.orders.find(x => x.id === orderId);
-  if (!o) throw err('ERR-BIZ-01');
-  if (o.status !== 'MENUNGGU' || db.transactions.some(t => t.orderId === o.id)) throw err('ERR-BIZ-02'); // BR-23
-  const printStatus = printResult(); // BR-27: print failure never cancels the payment
-  o.status = 'DIBAYAR';
-  o.paidAt = o.updatedAt = Date.now();
-  db.transactions.push({ id: crypto.randomUUID(), orderId, confirmedBy: s.userId, amount: o.total, printStatus, confirmedAt: o.paidAt });
+  const cur = db.orders.find(x => x.id === orderId);
+  if (cur.status !== 'MENUNGGU' || db.transactions.some(t => t.orderId === orderId)) throw err('ERR-BIZ-02'); // BR-23
+  cur.status = pesanan.status; cur.paidAt = pesanan.dibayar; cur.updatedAt = pesanan.diperbarui;
+  db.transactions.push({ id: crypto.randomUUID(), orderId, confirmedBy: kasir.id, amount: pesanan.total(), printStatus: cetak.status, confirmedAt: pesanan.dibayar });
   save(db);
-  return { printStatus };
+  return { printStatus: cetak.status, message: pesan, nota: cetak.teks };
 }
 export async function reprint(orderId) {
-  need('KASIR');
+  need('reprint');
   const db = load();
-  const t = db.transactions.find(x => x.orderId === orderId);
-  if (!t) throw err('ERR-BIZ-01');
-  t.printStatus = printResult();
-  save(db);
-  return t.printStatus;
+  const row = db.orders.find(x => x.id === orderId);
+  if (!row || !db.transactions.some(t => t.orderId === orderId)) throw err('ERR-BIZ-01');
+  const { status } = await printer().cetak(Pesanan.from(row), new Nota());
+  const fresh = load();
+  fresh.transactions.find(t => t.orderId === orderId).printStatus = status;
+  save(fresh);
+  return status;
 }
-const NEXT = { DIBAYAR: 'DIPROSES', DIPROSES: 'SELESAI' };
 export async function setStatus(orderId, to) {
-  need('BARISTA');
+  const barista = need('setStatus');
   const db = load();
-  const o = db.orders.find(x => x.id === orderId);
-  if (!o) throw err('ERR-BIZ-01');
-  if (o.status === to) throw err('ERR-SYS-05'); // someone else already did it: first change wins
-  if (NEXT[o.status] !== to) throw err('ERR-BIZ-03'); // BR-30: no skipping steps
-  o.status = to;
-  o.updatedAt = Date.now();
+  const row = db.orders.find(x => x.id === orderId);
+  if (!row) throw err('ERR-BIZ-01');
+  const pesanan = Pesanan.from(row);
+  barista.kerjakan(pesanan, to); // ASSOCIATION; the order enforces the status sequence itself (ENCAPSULATION)
+  Object.assign(row, pesanan.toJSON());
   save(db);
 }
 
 // ---------- ingredients & stock ----------
-const ingBad = i => [
-  !(i.name?.trim().length >= 1 && i.name.trim().length <= 100) && 'name',
-  !(i.unit?.trim() && i.unit.trim().length <= 20) && 'unit',
-  !(i.stockQty !== '' && +i.stockQty >= 0) && 'stockQty',
-  !(i.minStock !== '' && +i.minStock >= 0) && 'minStock',
-].filter(Boolean);
 export async function getStock() {
-  need('PEMILIK');
-  const db = load();
+  need('manageStock');
+  const inv = Inventori.dari(load().ingredients); // AGGREGATION
+  const low = new Set(inv.menipis().map(b => b.id));
   return {
-    ingredients: db.ingredients.map(i => ({ ...i, lowStock: i.isActive && i.stockQty <= i.minStock })), // BR-41
-    history: [...db.stockHistories].reverse().map(h => ({ ...h, name: db.ingredients.find(i => i.id === h.ingredientId)?.name })),
+    ingredients: inv.semua.map(b => ({ ...b.toJSON(), lowStock: low.has(b.id) })), // BR-41
+    history: inv.semua.flatMap(b => b.riwayat.map(h => ({ ...h, ingredientId: b.id, name: b.nama }))).sort((a, b) => b.createdAt - a.createdAt),
   };
 }
 export async function saveIngredient(i) {
-  need('PEMILIK');
+  need('manageStock');
   const db = load();
-  const bad = ingBad(i);
+  const bad = BahanBaku.fieldsBermasalah(i);
   if (db.ingredients.some(x => x.id !== i.id && x.name.toLowerCase() === i.name?.trim().toLowerCase())) bad.push('name');
   if (bad.length) throw err('ERR-VAL-10', undefined, bad);
-  const rec = { name: i.name.trim(), unit: i.unit.trim(), minStock: +i.minStock, updatedAt: Date.now() };
-  const cur = i.id && db.ingredients.find(x => x.id === i.id);
-  if (cur) Object.assign(cur, rec); // stock itself changes only via addStock (keeps history consistent)
-  else db.ingredients.push({ id: crypto.randomUUID(), isActive: true, stockQty: +i.stockQty, ...rec });
+  const idx = db.ingredients.findIndex(x => x.id === i.id);
+  const b = idx >= 0
+    ? BahanBaku.from(db.ingredients[idx]).perbarui(i) // stock itself changes only via addStock (keeps history consistent)
+    : new BahanBaku({ id: crypto.randomUUID(), nama: i.name, satuan: i.unit, stok: i.stockQty, stokMinimum: i.minStock });
+  if (idx >= 0) db.ingredients[idx] = b.toJSON(); else db.ingredients.push(b.toJSON());
   save(db);
 }
 export async function setIngredientActive(id, isActive) {
-  need('PEMILIK');
+  need('manageStock');
   const db = load();
-  db.ingredients.find(x => x.id === id).isActive = isActive; // BR-37: deactivate, never delete
+  const idx = db.ingredients.findIndex(x => x.id === id);
+  const b = BahanBaku.from(db.ingredients[idx]);
+  b.setAktif(isActive); // BR-37: deactivate, never delete
+  db.ingredients[idx] = b.toJSON();
   save(db);
 }
 export async function addStock({ ingredientId, changeType, quantity }) {
-  const s = need('PEMILIK');
+  const user = need('manageStock');
   const db = load();
-  const ing = db.ingredients.find(x => x.id === ingredientId);
-  const q = +quantity;
-  const ok = ing && quantity !== '' && (changeType === 'STOK_MASUK' ? q > 0 : changeType === 'PENYESUAIAN' && q >= 0); // BR-40: never negative
-  if (!ok) throw err('ERR-VAL-11', undefined, ['quantity']);
-  const delta = r2(changeType === 'STOK_MASUK' ? q : q - ing.stockQty); // adjustment logs the difference
-  ing.stockQty = r2(ing.stockQty + delta);
-  ing.updatedAt = Date.now();
-  db.stockHistories.push({ id: crypto.randomUUID(), ingredientId, userId: s.userId, username: s.username, changeType, quantity: delta, createdAt: Date.now() });
+  const idx = db.ingredients.findIndex(x => x.id === ingredientId);
+  if (idx < 0 || !['STOK_MASUK', 'PENYESUAIAN'].includes(changeType)) throw err('ERR-VAL-11', undefined, ['quantity']);
+  const b = BahanBaku.from(db.ingredients[idx]);
+  if (changeType === 'STOK_MASUK') b.stokMasuk(quantity, user); else b.sesuaikanStok(quantity, user); // both throw ERR-VAL-11 on bad input
+  db.ingredients[idx] = b.toJSON();
   save(db);
-  return { ...ing, lowStock: ing.stockQty <= ing.minStock };
+  return { ...b.toJSON(), lowStock: b.menipis() };
 }
 
 // ---------- report (BR-43) ----------
@@ -295,7 +272,7 @@ function summarize(db, date) {
   return { date, totalOrders: txs.length, totalRevenue: sum('revenue'), totalCost: sum('cost'), estimatedProfit: sum('revenue') - sum('cost'), menus };
 }
 export async function getReport(from, to) {
-  need('PEMILIK');
+  need('viewReport');
   const today = day(Date.now());
   if (!from || !to || from > to || to > today) throw err('ERR-VAL-12');
   const db = load();
