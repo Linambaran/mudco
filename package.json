@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "api": "node scripts/http-server.mjs",
+    "check:api": "node scripts/http-check.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

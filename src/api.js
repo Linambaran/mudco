@@ -202,6 +202,15 @@ export async function reprint(orderId) {
   save(fresh);
   return status;
 }
+// The browser reports the print result after window.print() (TSD PATCH .../print-status). Never touches the payment (BR-27).
+export async function setPrintStatus(orderId, status) {
+  need('reprint');
+  const db = load();
+  const tx = db.transactions.find(t => t.orderId === orderId);
+  if (!tx) throw err('ERR-BIZ-01');
+  tx.printStatus = status;
+  save(db);
+}
 export async function setStatus(orderId, to) {
   const barista = need('setStatus');
   const db = load();
