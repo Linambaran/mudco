@@ -5,7 +5,6 @@ import { MOCK, login } from '../api.js';
 import { Icon, Logo, act } from '../ui.jsx';
 
 const TABS = {
-  staf: ['Staf', 'user', 'kasir', 'Login Staf', 'Masuk untuk mengakses sistem MUD.CO.'],
   kasir: ['Kasir', 'printer', 'kasir', 'Login Kasir', 'Masuk untuk mengelola transaksi dan pencetakan nota.'],
   barista: ['Barista', 'coffee', 'barista', 'Login Barista', 'Masuk untuk mengelola pesanan dan status penyajian.'],
   pemilik: ['Pemilik', 'chart', 'pemilik', 'Login Pemilik', 'Masuk untuk melihat laporan, rekap keuntungan, menu, dan stok.'],
